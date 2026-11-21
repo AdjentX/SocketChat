@@ -89,10 +89,19 @@ int user_manager(UserOperationType opt_type, void *args) {
 
         case DELETE_USER:
             char **del_user = (char **)args;
+            
+            if (strlen(del_user) <= 0) {
+                fprintf(stderr, "ERROR: database.c -> user_manager(DELETE_USER) requires the userID");
+                return -1;
+            }
             int user_id = atoi(del_user[0]);
-    }
+            sql = "DELETE FROM accounts WHERE id = ?";
+            // rest of the logic to delete acc, had to go to slave job...
+
+    }  
 }
 
+/*
 int add_user(char *user, char *pass, int max_conns, AvailableRoles role) {
     const char *sql = "INSERT INTO accounts (username, password, max_conns, role) VALUES (?, ?, ?, ?);";
     sqlite3_stmt *stmt;
@@ -147,6 +156,8 @@ int delete_user(int userID) {
     sqlite3_finalize(stmt);
     return -1;
 }
+
+*/
 
 int init_db(const char *db_file) {
     const char *init_tables[] = {
