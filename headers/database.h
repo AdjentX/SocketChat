@@ -32,10 +32,9 @@ typedef enum {
 typedef enum {
     ADD_USER = 0,
     DELETE_USER = 1,
-    CHANGE_PASS = 2,
-    CHANGE_PLAN = 3,
-    VIEW_LOGS = 4,
-    LOGIN = 5,
+    UPDATE_USER = 2,
+    VIEW_LOGS = 3,
+    LOGIN = 4,
 } UserOperationType;
 
 typedef struct {

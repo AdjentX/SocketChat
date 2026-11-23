@@ -13,7 +13,7 @@ void *cnc_worker(void *worker_args) {
     client_info->logged_in = false;
     client_info->ip_address = get_socket_ip(handler_info->client_fd, *handler_info->client_addr);
     
-    printf("EVENT::New controller client connected from: %s\n", client_info->ip_address);
+    printf("EVENT: cnc_worker() -> New controller client connected from: %s\n", client_info->ip_address);
 
     set_terminal_title(handler_info->client_fd, "Qbot v2 - Login");
     ssize_t bytes_read = 0;
@@ -25,7 +25,7 @@ void *cnc_worker(void *worker_args) {
         goto end;
 
     strip_input(client_info->username, sizeof(client_info->username));
-    printf("EVENT::Username for login passed: %s from %s\n", client_info->username , client_info->ip_address);
+    printf("EVENT: cnc_worker() -> Username for login passed: %s from %s\n", client_info->username , client_info->ip_address);
 
     if (send(handler_info->client_fd, "Password: ", 10, MSG_NOSIGNAL) < 0)
         goto end;
@@ -34,7 +34,7 @@ void *cnc_worker(void *worker_args) {
         goto end;
 
     strip_input(client_info->password, sizeof(client_info->password));
-    printf("EVENT::Password for login passed: %s from %s\n", client_info->password, client_info->ip_address);
+    printf("EVENT: cnd_worker() -> Password for login passed: %s from %s\n", client_info->password, client_info->ip_address);
 
     end:
         handle_client_exit(handler_info, client_info);
