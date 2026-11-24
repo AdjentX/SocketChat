@@ -2,14 +2,6 @@
 
 Database our_db;
 
-// enum, str, int
-static const _role_map_t roles_arr[] = {
-    { ROLE_ADMIN, "ADMIN", -1 },
-    { ROLE_VIP, "VIP", 2 },
-    { ROLE_REGULAR, "STANDARD", 1 },
-    { ROLE_HOME, "HOME", 5 }
-};
-
 int user_manager(UserOperationType opt_type, void *args) {
     sqlite3_stmt *stmt = NULL;
     int result, user_id;
@@ -34,10 +26,8 @@ int user_manager(UserOperationType opt_type, void *args) {
 
                     sqlite3_finalize(stmt);
                     return 0;
-                } else
-                    sqlite3_finalize(stmt);
-            } else
-                sqlite3_finalize(stmt);
+                }
+            }
         break;
 
         case ADD_USER:
@@ -96,8 +86,6 @@ int user_manager(UserOperationType opt_type, void *args) {
             else
                 fprintf(stdout, "database.c -> delete_user(), user not found by submitted ID %d!\n", user_id);
             
-            sqlite3_finalize(stmt);
-
         case UPDATE_USER:
             // OperationType UPDATE user, first arg: ClientModification (database.h [enum]), 2nd arg, new val, 3rd arg acc ID.
             char **user_edit = (char **)args;
@@ -118,7 +106,7 @@ int user_manager(UserOperationType opt_type, void *args) {
                     sqlite3_bind_int(stmt, 1, user_id);
 
                     if (sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(our_db.db_handler) > 0) {
-                        fprintf(stdout, "EVENT: database.c -> user_manager(UPDATE_USER), password updated for %s (%d)"\n, (char *)sqlite3_column_text(stmt, 0), user_id);
+                        fprintf(stdout, "EVENT: database.c -> user_manager(UPDATE_USER), password updated for %s (%d)\n", (char *)sqlite3_column_text(stmt, 0), user_id);
                         sqlite3_finalize(stmt);
                         return 0;
                     } 
@@ -153,7 +141,11 @@ int user_manager(UserOperationType opt_type, void *args) {
                         return 0;
                     }
                     fprintf(stderr, "ERROR: database.c -> user_manager(UPDATE_USER), no updates made: ensure valid ID.\n");
-    }  
+                break;
+        break;
+    } 
+    if (stmt != NULL)
+        sqlite3_finalize(stmt);
     return -1;
 }
 
