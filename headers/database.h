@@ -30,6 +30,12 @@ typedef enum {
 } UserErrorsDB;
 
 typedef enum {
+    CHANGE_PASS = 8,
+    CHANGE_PLAN = 9,
+    TOGGLE_ACCOUNT = 7
+} ClientModification;
+
+typedef enum {
     ADD_USER = 0,
     DELETE_USER = 1,
     UPDATE_USER = 2,

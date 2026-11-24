@@ -10,16 +10,9 @@ static const _role_map_t roles_arr[] = {
     { ROLE_HOME, "HOME", 5 }
 };
 
-char *get_user_pass(char *userAlias) {
-    sqlite3_stmt *stmt = NULL;
-    const char *sql = "SELECT password FROM accounts WHERE username = ?;";
-    if (sqlite3_prepare_v2(our_db.db_handler, (const char *)sql, -1, &stmt, NULL) != SQLITE_OK) 
-        fprintf("Failed to prepare statement for password lookup!")
-}
-
 int user_manager(UserOperationType opt_type, void *args) {
     sqlite3_stmt *stmt = NULL;
-    int result;
+    int result, user_id;
     char *sql;
 
     switch (opt_type) {
@@ -85,7 +78,7 @@ int user_manager(UserOperationType opt_type, void *args) {
             if (strlen(del_user) <= 0)
                 fprintf(stderr, "ERROR: database.c -> user_manager(DELETE_USER) requires the userID!\n");
 
-            int user_id = atoi(del_user[0]);
+            user_id = atoi(del_user[0]);
             sql = "DELETE FROM accounts WHERE id = ?";
 
             // rest of the logic to delete acc, had to go to slave job...
@@ -101,23 +94,65 @@ int user_manager(UserOperationType opt_type, void *args) {
             } else if (deletion_attempt == SQLITE_DONE)
                 fprintf(stderr, "database.c -> delete_user(), Execution failed: %s\n", sqlite3_errmsg(our_db.db_handler));
             else
-                fprintf(stdout, "database.c -> delete_user(), user not found by submitted ID %d\n", user_id);
+                fprintf(stdout, "database.c -> delete_user(), user not found by submitted ID %d!\n", user_id);
             
             sqlite3_finalize(stmt);
 
         case UPDATE_USER:
-            char **new_pass = (char **)args;
-            sql = "UPDATE accounts SET password = ?, role = ?, max_conns = ? WHERE id = ?;"; 
+            // OperationType UPDATE user, first arg: ClientModification (database.h [enum]), 2nd arg, new val, 3rd arg acc ID.
+            char **user_edit = (char **)args;
 
-            if (strlen(new_pass) <= 0 || strlen(new_pass) > 4)
-                fprintf(stderr, "ERROR: database.c -> manager_user(UPDATE_USER), too many or too few arguments passed.");   
+            if (strlen(user_edit < 3))
+                fprintf(stderr, "ERROR: database.c -> user_user(UPDATE_USER), too few arguments passed.");  
+            user_id = atoi(user_edit[2]);
 
-            if (sqlite3_prepare_v2(our_db.db_handler, sql, -1, &stmt, NULL) != SQLITE_OK)
-                fprintf(stderr, "ERROR: database.c -> user_manager(CHANGE_PASS), failed to update user.\nReason: %s!\n", sqlite3_errmsg(our_db.db_handler));
-            
-            char *updated_pass = (!new_pass[0]) ?
+            switch (atoi(user_edit[0])) {
+                case CHANGE_PASS:
+                    char *new_pass = user_edit[1];
+                    sql = "UPDATE accounts SET password = ? WHERE id = ? RETURNING username;";
+                
+                    if (sqlite3_prepare_v2(our_db.db_handler, sql, -1, &stmt, NULL) != SQLITE_OK)
+                        fprintf(stderr, "ERROR: database.c -> user_manager(UPDATE_USER), failed to update user pass.\nReason: %s!\n", sqlite3_errmsg(our_db.db_handler));
+                
+                    sqlite3_bind_text(stmt, 0, new_pass, -1, SQLITE_STATIC);
+                    sqlite3_bind_int(stmt, 1, user_id);
 
-            sqlite_bind_text(stmt, 0, );
+                    if (sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(our_db.db_handler) > 0) {
+                        fprintf(stdout, "EVENT: database.c -> user_manager(UPDATE_USER), password updated for %s (%d)"\n, (char *)sqlite3_column_text(stmt, 0), user_id);
+                        sqlite3_finalize(stmt);
+                        return 0;
+                    } 
+                    fprintf(stderr, "ERROR: database.c -> user_manager(UPDATE_USER), no updates made: ensure specified account ID actually exists.\n");
+                break;
+                case CHANGE_PLAN:
+                    sql = "UPDATE accounts SET role = ? WHERE id = ? RETURNING username;";
+                    if (sqlite3_prepare_v2(our_db.db_handler, sql, -1, &stmt, NULL) != SQLITE_OK)
+                        fprintf(stderr, "ERROR: database.c -> user_manager(UPDATE_USER), failed to update user plan\nReason: %s\n", sqlite3_errmsg(our_db.db_handler));
+                    
+                    sqlite3_bind_int(stmt, 0, atoi(user_edit[1]));
+                    sqlite3_bind_int(stmt, 1, user_id);
+                    if (sqlite3_step(stmt) == SQLITE_DONE && sqlite_changes(our_db.db_handler) > 0) {
+                        fprintf(stdout, "EVENT: database.c -> user_manager(UPDATE_USER), plan updated for %s (%d)", (char *)sqlite3_column_text(stmt, 1), user_id);
+                        sqlite3_finalize(stmt);
+                        return 0;
+                    }
+                    fprintf(stderr, "ERROR: database.c -> user_manager(UPDATE_USER), no updates made: ensure valid ID.\n");
+                }
+                break;
+                case TOGGLE_ACCOUNT:
+                    sql = "UPDATE accounts SET disabled = ? WHERE id = ? RETURNING username;";
+                    if (sqlite3_prepare_v2(our_db.db_handler, sql, -1, &stmt, NULL) != SQLITE_OK) 
+                        fprintf(stderr, "ERROR: database.c -> user_manager(UPDATE_USER), failed to toggled user account\nReason: %s\n", sqlite3_errmsg(our_db.db_handler));
+                    
+                    sqlite3_bind_int(stmt, 0, atoi(user_edit[1]));
+                    sqlite3_bind_int(stmt, 1, user_id);
+
+                    if (sqlite3_step(stmt) == SQLITE_DONE && sqlite_changes(our_db.db_handler) > 0) {
+                        fprintf(stdout, "EVENT: database.c -> user_manager(UPDATE_USER), disabled: %s (%d)\n", (char *)sqlite3_column_text(stmt, 0), user_id);
+                        sqlite3_finalize(stmt);
+                        return 0;
+                    }
+                    fprintf(stderr, "ERROR: database.c -> user_manager(UPDATE_USER), no updates made: ensure valid ID.\n");
     }  
     return -1;
 }
@@ -130,8 +165,9 @@ int init_db(const char *db_file) {
         "  username TEXT NOT NULL UNIQUE,"
         "  password TEXT NOT NULL,"
         "  max_conns INTEGER NOT NULL DEFAULT 1,"
-        "  role INTEGER NOT NULL CHECK(role IN (0, 1, 2, 3))" // reference enums in database.h.
-        ");", 
+        "  role INTEGER NOT NULL CHECK(role IN (0, 1, 2, 3))," // reference enums in database.h.
+        "  disabled INTEGER NOT NULL DEFAULT 0 CHECK(disabled IN (0, 1))"
+        ");",
 
         // logs table
         "CREATE TABLE IF NOT EXISTS logs ("
