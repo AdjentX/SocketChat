@@ -13,18 +13,7 @@
 #include <stdio.h>
 #include <fcntl.h>
 
-#include "database.h"
-
-typedef struct {
-    char username[255];
-    char password[255];
-    char *ip_address;
-    int attacks_active;
-    bool logged_in;
-    UserAccount acc_info;
-} ClientInfo;
-
-#include "handler.h"
+#include "objects.h" 
 #include "worker.h"
 
 // returns remote ip str in readable text form from passed fd.
@@ -37,9 +26,6 @@ void strip_input(char *buffer, int *sz);
 void *create_and_bind(int port, int max_clients);
 
 int set_nonblocking(int fd);
-
-// title writer.
-ssize_t set_terminal_title(int fd, const char *title);
 
 // initializes a server fd for handler create_and_bind().
 int init_server_fd();

@@ -45,16 +45,6 @@ char *get_socket_ip(int sock, struct sockaddr_in addr) {
     return NULL;
 }
 
-ssize_t set_terminal_title(int fd, const char *title) {
-    char buf[256];
-    int len = snprintf(buf, sizeof(buf), "\033]0;%s\007", title);
-
-    if (len < 0 || (size_t)len >= sizeof(buf))
-        return -1; // Title was too long or formatting failed
-
-    return send(fd, buf, (size_t)len, MSG_NOSIGNAL);
-}
-
 void *create_and_bind(int port, int max_clients) {
     int listen_fd = init_server_fd();
     if (listen_fd == -1) {

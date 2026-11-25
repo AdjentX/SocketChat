@@ -2,6 +2,11 @@
 #ifndef WORKER_H
 #define WORKER_H
 
+#include <sys/socket.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+#include "objects.h"
 #include "handler.h"
 #include "utils.h"
 

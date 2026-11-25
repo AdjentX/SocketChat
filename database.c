@@ -1,10 +1,11 @@
 #include "headers/database.h"
 
+typedef _user_acc_t user_acc_t;
 Database our_db;
 
 int user_manager(UserOperationType opt_type, void *args) {
     sqlite3_stmt *stmt = NULL;
-    int result, user_id;
+    int result, user_id, err_val;
     char *sql;
 
     switch (opt_type) {
@@ -12,18 +13,17 @@ int user_manager(UserOperationType opt_type, void *args) {
             ClientInfo *login_user = (ClientInfo *)args;
             // login query prepared statement.
             sql = "SELECT id, password, username, max_conns, role FROM accounts WHERE username = ?;";
-            if (sqlite3_prepare_v2(our_db.db_handler, (const char *)sql, -1, &stmt, NULL) != SQLITE_OK)
-                fprintf(stderr, "Error: %s\n", sqlite3_errmsg(our_db.db_handler));
+            if ((err_val = sqlite3_prepare_v2(our_db.db_handler, (const char *)sql, -1, &stmt, NULL)) != SQLITE_OK)
+                fprintf(stderr, "Error: %s\n", sqlite3_errstr(err_val));
 
             sqlite3_bind_text(stmt, 1, login_user->username, -1, SQLITE_STATIC);
             if (sqlite3_step(stmt) == SQLITE_ROW) {
                 const char *stored_pass = (const char *)sqlite3_column_text(stmt, 1);
                 if (stored_pass && !strcmp(stored_pass, login_user->password)) {
                     login_user->logged_in = true;
-                    login_user->acc_info.userID = sqlite_column_int(stmt, 0);
-                    login_user->acc_info.maxConns = sqlite3_column_int(stmt, 3);
-                    login_user->acc_info.userRole = (role_t)sqlite_colun_int(stmt, 4);
-
+                    login_user->cli_acc.userID = sqlite3_column_int(stmt, 0);
+                    login_user->cli_acc.maxConns = sqlite3_column_int(stmt, 3);
+                    login_user->cli_acc.userRoles = (role_t)sqlite3_column_int(stmt, 4);
                     sqlite3_finalize(stmt);
                     return 0;
                 }
@@ -38,13 +38,13 @@ int user_manager(UserOperationType opt_type, void *args) {
             role_t role = atoi(new_user[3]);
             int max_conns = atoi(new_user[2]);
 
-            if (strlen(new_user) < 4)
+            if (sizeof(new_user) < 4)
                 fprintf(stderr, "ERROR: database.c -> user_manager(AddUser) - missing parameters!\n");
 
             // add user prepared statement.
             sql = "INSERT INTO  accounts (username, password, max_conns, role) VALUES (?, ?, ?, ?);";
-            if (sqlite3_prepare_v2(our_db.db_handler, (const char *)sql, -1, &stmt, NULL) != SQLITE_OK)
-                fprintf(stderr, "Error: %s\n", sqlite3_errmsg(our_db.db_handler));
+            if ((err_val = sqlite3_prepare_v2(our_db.db_handler, (const char *)sql, -1, &stmt, NULL)) != SQLITE_OK)
+                fprintf(stderr, "Error: %s\n", sqlite3_errstr(err_val));
 
             sqlite3_bind_text(stmt, 1, user, -1, SQLITE_STATIC);
             sqlite3_bind_text(stmt, 2, pass, -1, SQLITE_STATIC);
@@ -52,28 +52,28 @@ int user_manager(UserOperationType opt_type, void *args) {
             sqlite3_bind_int(stmt, 4, role);
 
             result = sqlite3_step(stmt);
-            if (result = SQLITE_DONE) {
+            if (result == SQLITE_DONE) {
                 sqlite3_finalize(stmt);
                 return 0;
             } else if (result == SQLITE_CONSTRAINT)
-                fprintf(stderr, "Error adding user: %s\n", sqlite3_errmsg(our_db.db_handler));
+                fprintf(stderr, "Error adding user: %s\n", sqlite3_errstr(err_val));
             else  
-                fprintf(stderr, "ERROR: database.c -> user_manager(AddUser) - failure: %s", sqlite3_errmsg(our_db.db_handler));
+                fprintf(stderr, "ERROR: database.c -> user_manager(AddUser) - failure: %s", sqlite3_errstr(err_val));
             sqlite3_finalize(stmt);
         break;
 
         case DELETE_USER:
             char **del_user = (char **)args;
             
-            if (strlen(del_user) <= 0)
+            if (sizeof(del_user) <= 0)
                 fprintf(stderr, "ERROR: database.c -> user_manager(DELETE_USER) requires the userID!\n");
 
             user_id = atoi(del_user[0]);
             sql = "DELETE FROM accounts WHERE id = ?";
 
             // rest of the logic to delete acc, had to go to slave job...
-            if (sqlite3_prepare_v2(our_db.db_handler, sql, -1, &stmt, NULL) != SQLITE_OK)
-                fprintf(stderr, "ERROR: database.c -> user_manager(DELETE_USER), failed to prepare sql statement.\nReason: %s\n", sqlite3_error(our_db.db_handler));
+            if ((err_val = sqlite3_prepare_v2(our_db.db_handler, sql, -1, &stmt, NULL)) != SQLITE_OK)
+                fprintf(stderr, "ERROR: database.c -> user_manager(DELETE_USER), failed to prepare sql statement.\nReason: %s\n", sqlite3_errstr(err_val));
 
             sqlite3_bind_int(stmt, 1, user_id);
             int deletion_attempt = sqlite3_step(stmt);
@@ -82,15 +82,16 @@ int user_manager(UserOperationType opt_type, void *args) {
                 sqlite3_finalize(stmt);
                 return 0;
             } else if (deletion_attempt == SQLITE_DONE)
-                fprintf(stderr, "database.c -> delete_user(), Execution failed: %s\n", sqlite3_errmsg(our_db.db_handler));
+                fprintf(stderr, "database.c -> delete_user(), Execution failed: %s\n", sqlite3_errstr(deletion_attempt));
             else
                 fprintf(stdout, "database.c -> delete_user(), user not found by submitted ID %d!\n", user_id);
-            
+        break;
+        
         case UPDATE_USER:
             // OperationType UPDATE user, first arg: ClientModification (database.h [enum]), 2nd arg, new val, 3rd arg acc ID.
             char **user_edit = (char **)args;
 
-            if (strlen(user_edit < 3))
+            if (sizeof(user_edit) < 3)
                 fprintf(stderr, "ERROR: database.c -> user_user(UPDATE_USER), too few arguments passed.");  
             user_id = atoi(user_edit[2]);
 
@@ -99,8 +100,8 @@ int user_manager(UserOperationType opt_type, void *args) {
                     char *new_pass = user_edit[1];
                     sql = "UPDATE accounts SET password = ? WHERE id = ? RETURNING username;";
                 
-                    if (sqlite3_prepare_v2(our_db.db_handler, sql, -1, &stmt, NULL) != SQLITE_OK)
-                        fprintf(stderr, "ERROR: database.c -> user_manager(UPDATE_USER), failed to update user pass.\nReason: %s!\n", sqlite3_errmsg(our_db.db_handler));
+                    if ((err_val = sqlite3_prepare_v2(our_db.db_handler, sql, -1, &stmt, NULL)) != SQLITE_OK)
+                        fprintf(stderr, "ERROR: database.c -> user_manager(UPDATE_USER), failed to update user pass.\nReason: %s!\n", sqlite3_errstr(err_val));
                 
                     sqlite3_bind_text(stmt, 0, new_pass, -1, SQLITE_STATIC);
                     sqlite3_bind_int(stmt, 1, user_id);
@@ -114,12 +115,12 @@ int user_manager(UserOperationType opt_type, void *args) {
                 break;
                 case CHANGE_PLAN:
                     sql = "UPDATE accounts SET role = ? WHERE id = ? RETURNING username;";
-                    if (sqlite3_prepare_v2(our_db.db_handler, sql, -1, &stmt, NULL) != SQLITE_OK)
-                        fprintf(stderr, "ERROR: database.c -> user_manager(UPDATE_USER), failed to update user plan\nReason: %s\n", sqlite3_errmsg(our_db.db_handler));
+                    if ((err_val = sqlite3_prepare_v2(our_db.db_handler, sql, -1, &stmt, NULL)) != SQLITE_OK)
+                        fprintf(stderr, "ERROR: database.c -> user_manager(UPDATE_USER), failed to update user plan\nReason: %s\n", sqlite3_errstr(err_val));
                     
                     sqlite3_bind_int(stmt, 0, atoi(user_edit[1]));
                     sqlite3_bind_int(stmt, 1, user_id);
-                    if (sqlite3_step(stmt) == SQLITE_DONE && sqlite_changes(our_db.db_handler) > 0) {
+                    if (sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(our_db.db_handler) > 0) {
                         fprintf(stdout, "EVENT: database.c -> user_manager(UPDATE_USER), plan updated for %s (%d)", (char *)sqlite3_column_text(stmt, 1), user_id);
                         sqlite3_finalize(stmt);
                         return 0;
@@ -129,13 +130,13 @@ int user_manager(UserOperationType opt_type, void *args) {
                 break;
                 case TOGGLE_ACCOUNT:
                     sql = "UPDATE accounts SET disabled = ? WHERE id = ? RETURNING username;";
-                    if (sqlite3_prepare_v2(our_db.db_handler, sql, -1, &stmt, NULL) != SQLITE_OK) 
-                        fprintf(stderr, "ERROR: database.c -> user_manager(UPDATE_USER), failed to toggled user account\nReason: %s\n", sqlite3_errmsg(our_db.db_handler));
+                    if ((err_val = sqlite3_prepare_v2(our_db.db_handler, sql, -1, &stmt, NULL)) != SQLITE_OK) 
+                        fprintf(stderr, "ERROR: database.c -> user_manager(UPDATE_USER), failed to toggled user account\nReason: %s\n", sqlite3_errstr(err_val));
                     
                     sqlite3_bind_int(stmt, 0, atoi(user_edit[1]));
                     sqlite3_bind_int(stmt, 1, user_id);
 
-                    if (sqlite3_step(stmt) == SQLITE_DONE && sqlite_changes(our_db.db_handler) > 0) {
+                    if ((sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(our_db.db_handler)) > 0) {
                         fprintf(stdout, "EVENT: database.c -> user_manager(UPDATE_USER), disabled: %s (%d)\n", (char *)sqlite3_column_text(stmt, 0), user_id);
                         sqlite3_finalize(stmt);
                         return 0;
@@ -176,11 +177,11 @@ int init_db(const char *db_file) {
     };
 
     sqlite3 *database = NULL;
-    int err_msg = 0;
+    char *err_msg = NULL;
 
-    if ((err_msg = sqlite3_open(db_file, &database)) != SQLITE_OK) {
-        printf("Couldn't open database file and/or initialize the sqlite3 object in memory: %s", sqlite3_errmsg(err_msg));
-        sqlite3_close(db_file);
+    if (sqlite3_open(db_file, &database) != SQLITE_OK) {
+        fprintf(stderr, "Couldn't open database file and/or initialize the sqlite3 object in memory: %s", sqlite3_errmsg(database));
+        sqlite3_close(database);
         return 0;
     }
     
@@ -188,8 +189,8 @@ int init_db(const char *db_file) {
     size_t tables = sizeof(init_tables) / sizeof(char *);
     for (int t = 0; t < tables; t++)
         if ((sqlite3_exec(database, init_tables[t], NULL, NULL, &err_msg)) != SQLITE_OK) {
-            printf("Failed to initialize our innately required tables for database.\nError: %s\n", sqlite3_errmsg(err_msg));
-            sqlite3_close(db_file);
+            fprintf(stderr, "Failed to initialize our innately required tables for database.\nError: %s\n", err_msg);
+            sqlite3_close(database);
             return 0;
         }
 
